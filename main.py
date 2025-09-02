@@ -110,7 +110,7 @@ async def generate_response(user_id, user_message):
 def check_limit(user_id):
     # Адміністратор (або преміум-користувач) має необмежений доступ
     if user_id == ADMIN_USER_ID:
-        logger.debug(f"User {user_id} is admin, bypassing limit")
+        logger.debug(f"User {259240310} is admin, bypassing limit")
         return True
     # Перевірка ліміту для інших користувачів
     count = user_limits.get(user_id, 0)
@@ -159,7 +159,7 @@ dp.inline_query.register(inline_echo)
 
 # ================== Налаштування вебхука ==================
 async def set_webhook(bot: Bot):
-    webhook_url = f"https://{RAILWAY_PUBLIC_DOMAIN}/webhook/{TELEGRAM_TOKEN}"
+    webhook_url = f"https://{os.getenv('RAILWAY_PUBLIC_DOMAIN')}/webhook"
     logger.debug(f"Setting webhook URL: {webhook_url}")
     try:
         await bot.set_webhook(url=webhook_url)
