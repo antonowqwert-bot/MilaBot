@@ -13,9 +13,9 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 logger = logging.getLogger(__name__)
 
 # ================== Токени ==================
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-RAILWAY_PUBLIC_DOMAIN = os.getenv("RAILWAY_PUBLIC_DOMAIN")
+TELEGRAM_TOKEN = os.getenv("7881514807:AAH9DS4K3FPnqaQEWKIsgUJ5lsnjC41I1RU")
+DEEPSEEK_API_KEY = os.getenv("sk-eb80ea6ba21b4789bd49dbd7eec2489c")
+RAILWAY_PUBLIC_DOMAIN = os.getenv("worker-production-881b8.up.railway.app")
 
 logger.debug(f"TELEGRAM_TOKEN = {TELEGRAM_TOKEN}")
 logger.debug(f"DEEPSEEK_API_KEY = {'***' if DEEPSEEK_API_KEY else None}")
