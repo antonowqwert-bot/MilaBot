@@ -8,19 +8,20 @@ from aiohttp import web
 from openai import OpenAI
 
 # ================== Перевірка токенів ==================
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-RAILWAY_PUBLIC_DOMAIN = os.getenv("RAILWAY_PUBLIC_DOMAIN")
+TELEGRAM_TOKEN = "7881514807:AAH9DS4K3FPnqaQEWKIsgUJ5lsnjC41I1RU"
+DEEPSEEK_API_KEY = "sk-f400eb4d8a2c478e97b83278106fafd1"
+RAILWAY_PUBLIC_DOMAIN = "worker-production-881b8.up.railway.app"
 
-print(f"DEBUG: TELEGRAM_TOKEN = {TELEGRAM_TOKEN}")  # Додаємо дебаг-вивід
-print(f"DEBUG: RAILWAY_PUBLIC_DOMAIN = {RAILWAY_PUBLIC_DOMAIN}")  # Додаємо дебаг-вивід
+print(f"DEBUG: TELEGRAM_TOKEN = {TELEGRAM_TOKEN}")
+print(f"DEBUG: RAILWAY_PUBLIC_DOMAIN = {RAILWAY_PUBLIC_DOMAIN}")
 
+# Перевірка токенів
 if not TELEGRAM_TOKEN:
-    raise ValueError("❌ TELEGRAM_TOKEN не знайдено. Перевір Environment Variables на Railway!")
+    raise ValueError("❌ TELEGRAM_TOKEN не знайдено!")
 if not DEEPSEEK_API_KEY:
-    raise ValueError("❌ DEEPSEEK_API_KEY не знайдено. Перевір Environment Variables на Railway!")
+    raise ValueError("❌ DEEPSEEK_API_KEY не знайдено!")
 if not RAILWAY_PUBLIC_DOMAIN:
-    raise ValueError("❌ RAILWAY_PUBLIC_DOMAIN не знайдено. Перевір Environment Variables на Railway!")
+    raise ValueError("❌ RAILWAY_PUBLIC_DOMAIN не знайдено!")
 
 BASE_URL = 'https://api.deepseek.com'
 MODEL = 'deepseek-chat'
