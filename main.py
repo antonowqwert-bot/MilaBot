@@ -177,9 +177,7 @@ async def main():
     logger.debug("Starting web server...")
     try:
         app = web.Application()
-        webhook_requests_handler = SimpleRequestHandler(
-            dispatcher=dp, bot=bot, secret_token=TELEGRAM_TOKEN
-        )
+        webhook_url = f"https://{os.getenv('RAILWAY_PUBLIC_DOMAIN')}/webhook/{TELEGRAM_TOKEN}"
         webhook_requests_handler.register(app, path=f"/webhook/{TELEGRAM_TOKEN}")
         setup_application(app, dp, bot=bot)
 
