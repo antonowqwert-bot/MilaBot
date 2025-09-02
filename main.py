@@ -159,7 +159,8 @@ dp.inline_query.register(inline_echo)
 
 # ================== Налаштування вебхука ==================
 async def set_webhook(bot: Bot):
-    webhook_url = f"https://{os.getenv('RAILWAY_PUBLIC_DOMAIN')}/webhook"
+    webhook_path = f"/webhook/{TELEGRAM_TOKEN}"
+    webhook_url = f"https://{RAILWAY_PUBLIC_DOMAIN}{webhook_path}"
     logger.debug(f"Setting webhook URL: {webhook_url}")
     try:
         await bot.set_webhook(url=webhook_url)
@@ -180,13 +181,13 @@ async def main():
         webhook_requests_handler = SimpleRequestHandler(
             dispatcher=dp, bot=bot, secret_token=TELEGRAM_TOKEN
         )
-        webhook_requests_handler.register(app, path=f"/webhook/{TELEGRAM_TOKEN}")
+        webhook_path = f"/webhook/{TELEGRAM_TOKEN}"
+        logger.debug(f"Registering webhook handler on path: {webhook_path}")
+        webhook_requests_handler.register(app, path=webhook_path)
         setup_application(app, dp, bot=bot)
 
-        # Реєстрація хендлера для запуску
         dp.startup.register(on_startup)
 
-        # Запуск вебсервера
         runner = web.AppRunner(app)
         await runner.setup()
         port = int(os.getenv('PORT', 8080))
@@ -198,7 +199,6 @@ async def main():
         logger.error(f"Failed to start web server: {str(e)}")
         raise
 
-    # Чекаємо завершення
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
