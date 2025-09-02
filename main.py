@@ -10,12 +10,17 @@ from openai import OpenAI
 # ================== Перевірка токенів ==================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+RAILWAY_PUBLIC_DOMAIN = os.getenv("RAILWAY_PUBLIC_DOMAIN")
+
+print(f"DEBUG: TELEGRAM_TOKEN = {TELEGRAM_TOKEN}")  # Додаємо дебаг-вивід
+print(f"DEBUG: RAILWAY_PUBLIC_DOMAIN = {RAILWAY_PUBLIC_DOMAIN}")  # Додаємо дебаг-вивід
 
 if not TELEGRAM_TOKEN:
     raise ValueError("❌ TELEGRAM_TOKEN не знайдено. Перевір Environment Variables на Railway!")
-
 if not DEEPSEEK_API_KEY:
     raise ValueError("❌ DEEPSEEK_API_KEY не знайдено. Перевір Environment Variables на Railway!")
+if not RAILWAY_PUBLIC_DOMAIN:
+    raise ValueError("❌ RAILWAY_PUBLIC_DOMAIN не знайдено. Перевір Environment Variables на Railway!")
 
 BASE_URL = 'https://api.deepseek.com'
 MODEL = 'deepseek-chat'
