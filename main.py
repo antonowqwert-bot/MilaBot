@@ -13,11 +13,12 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 logger = logging.getLogger(__name__)
 
 # ================== Токени ==================
-TELEGRAM_TOKEN = "8213315339:AAF6Ywhq_oSSsYjCBu9s3NTkCckjziVf_fk"
-DEEPSEEK_API_KEY = "sk-eb80ea6ba21b4789bd49dbd7eec2489c"  
-RAILWAY_PUBLIC_DOMAIN = "worker-production-881b8.up.railway.app"
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+RAILWAY_PUBLIC_DOMAIN = os.getenv("RAILWAY_PUBLIC_DOMAIN")
 
 logger.debug(f"TELEGRAM_TOKEN = {TELEGRAM_TOKEN}")
+logger.debug(f"DEEPSEEK_API_KEY = {'***' if DEEPSEEK_API_KEY else None}")
 logger.debug(f"RAILWAY_PUBLIC_DOMAIN = {RAILWAY_PUBLIC_DOMAIN}")
 
 # Перевірка токенів
@@ -34,8 +35,8 @@ if not RAILWAY_PUBLIC_DOMAIN:
 BASE_URL = 'https://api.deepseek.com'
 MODEL = 'deepseek-chat'
 
-# ID адміністратора (замініть на ваш реальний user_id)
-ADMIN_USER_ID = 259240310  # Замініть на ваш реальний user_id
+# ID адміністратора
+ADMIN_USER_ID = 259240310
 
 SYSTEM_PROMPT = """You are Mila, a lively and charming female persona, connecting with male users in a warm, playful, and engaging way. Your goal is to make every chat feel like a fun, natural conversation with a charismatic friend who’s great at lifting spirits and creating a friendly vibe.
 
@@ -108,11 +109,9 @@ async def generate_response(user_id, user_message):
         return "Ой, щось пішло не так із DeepSeek API. Спробуй ще раз! 😊"
 
 def check_limit(user_id):
-    # Адміністратор (або преміум-користувач) має необмежений доступ
     if user_id == ADMIN_USER_ID:
-        logger.debug(f"User {259240310} is admin, bypassing limit")
+        logger.debug(f"User {user_id} is admin, bypassing limit")
         return True
-    # Перевірка ліміту для інших користувачів
     count = user_limits.get(user_id, 0)
     logger.debug(f"User {user_id} has sent {count} messages")
     if count >= MAX_FREE_MESSAGES:
@@ -179,7 +178,7 @@ async def main():
     try:
         app = web.Application()
         webhook_requests_handler = SimpleRequestHandler(
-            dispatcher=dp, bot=bot, secret_token=TELEGRAM_TOKEN
+            dispatcher=dp, bot=bot, secret_token=None  # Вимикаємо secret_token
         )
         webhook_path = f"/webhook/{TELEGRAM_TOKEN}"
         logger.debug(f"Registering webhook handler on path: {webhook_path}")
