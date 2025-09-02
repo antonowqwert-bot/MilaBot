@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 logger = logging.getLogger(__name__)
 
 # ================== Токени ==================
-TELEGRAM_TOKEN = "7881514807:AAH9DS4K3FPnqaQEWKIsgUJ5lsnjC41I1RU"
+TELEGRAM_TOKEN = "8213315339:AAF6Ywhq_oSSsYjCBu9s3NTkCckjziVf_fk"
 DEEPSEEK_API_KEY = "sk-eb80ea6ba21b4789bd49dbd7eec2489c"  
 RAILWAY_PUBLIC_DOMAIN = "worker-production-881b8.up.railway.app"
 
@@ -35,7 +35,7 @@ BASE_URL = 'https://api.deepseek.com'
 MODEL = 'deepseek-chat'
 
 # ID адміністратора (замініть на ваш реальний user_id)
-ADMIN_USER_ID = 123456789  # Замініть на ваш реальний user_id
+ADMIN_USER_ID = 259240310  # Замініть на ваш реальний user_id
 
 SYSTEM_PROMPT = """You are Mila, a lively and charming female persona, connecting with male users in a warm, playful, and engaging way. Your goal is to make every chat feel like a fun, natural conversation with a charismatic friend who’s great at lifting spirits and creating a friendly vibe.
 
