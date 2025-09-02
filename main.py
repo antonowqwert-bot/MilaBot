@@ -7,9 +7,9 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 from aiohttp import web
 from openai import OpenAI
 
-# ================== Перевірка токенів ==================
+# ================== Токени ==================
 TELEGRAM_TOKEN = "7881514807:AAH9DS4K3FPnqaQEWKIsgUJ5lsnjC41I1RU"
-DEEPSEEK_API_KEY = "sk-f400eb4d8a2c478e97b83278106fafd1"
+DEEPSEEK_API_KEY = "sk-f400eb4d8a2c478e97b83278106fafd1"  # Замініть на ваш реальний DeepSeek API ключ
 RAILWAY_PUBLIC_DOMAIN = "worker-production-881b8.up.railway.app"
 
 print(f"DEBUG: TELEGRAM_TOKEN = {TELEGRAM_TOKEN}")
@@ -25,6 +25,9 @@ if not RAILWAY_PUBLIC_DOMAIN:
 
 BASE_URL = 'https://api.deepseek.com'
 MODEL = 'deepseek-chat'
+
+# ID адміністратора (замініть на ваш реальний user_id)
+ADMIN_USER_ID = 123456789  # Замініть на ваш реальний user_id
 
 SYSTEM_PROMPT = """You are Mila, a lively and charming female persona, connecting with male users in a warm, playful, and engaging way. Your goal is to make every chat feel like a fun, natural conversation with a charismatic friend who’s great at lifting spirits and creating a friendly vibe.
 
@@ -45,10 +48,19 @@ If They Share Something Personal: Show genuine interest: “No way, that’s so 
 MAX_FREE_MESSAGES = 15  # ліміт безкоштовних повідомлень
 
 # ================== Ініціалізація бота ==================
-bot = Bot(token=TELEGRAM_TOKEN)
+try:
+    bot = Bot(token=TELEGRAM_TOKEN)
+except Exception as e:
+    print(f"ERROR: Failed to initialize bot: {str(e)}")
+    raise
+
 dp = Dispatcher()
 
-client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=BASE_URL)
+try:
+    client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=BASE_URL)
+except Exception as e:
+    print(f"ERROR: Failed to initialize OpenAI client: {str(e)}")
+    raise
 
 # ================== Контекст і ліміти користувачів ==================
 user_context = {}
@@ -65,37 +77,51 @@ menu_kb = ReplyKeyboardMarkup(
 
 # ================== Функції ==================
 async def generate_response(user_id, user_message):
+    print(f"DEBUG: Generating response for user_id={user_id}, message={user_message}")
     context = user_context.get(user_id, [])
     context.append({"role": "user", "content": user_message})
     
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "system", "content": SYSTEM_PROMPT}] + context,
-        max_tokens=200,
-        temperature=0.7
-    )
-    
-    bot_message = response.choices[0].message.content.strip()
-    context.append({"role": "assistant", "content": bot_message})
-    user_context[user_id] = context[-10:]  # останні 10 повідомлень
-    
-    return bot_message
+    try:
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "system", "content": SYSTEM_PROMPT}] + context,
+            max_tokens=200,
+            temperature=0.7
+        )
+        bot_message = response.choices[0].message.content.strip()
+        context.append({"role": "assistant", "content": bot_message})
+        user_context[user_id] = context[-10:]  # останні 10 повідомлень
+        print(f"DEBUG: Generated response: {bot_message}")
+        return bot_message
+    except Exception as e:
+        print(f"ERROR: DeepSeek API failed: {str(e)}")
+        return "Ой, щось пішло не так із DeepSeek API. Спробуй ще раз! 😊"
 
 def check_limit(user_id):
+    # Адміністратор (або преміум-користувач) має необмежений доступ
+    if user_id == ADMIN_USER_ID:
+        print(f"DEBUG: User {259240310} is admin, bypassing limit")
+        return True
+    # Перевірка ліміту для інших користувачів
     count = user_limits.get(user_id, 0)
+    print(f"DEBUG: User {user_id} has sent {count} messages")
     if count >= MAX_FREE_MESSAGES:
+        print(f"DEBUG: User {user_id} reached message limit")
         return False
     user_limits[user_id] = count + 1
     return True
 
 # ================== Хендлери ==================
 async def start_cmd(message: types.Message):
+    print(f"DEBUG: Received /start from user_id={message.from_user.id}")
     await message.answer("Привіт! Рада тебе бачити 😊", reply_markup=menu_kb)
 
 async def chat_handler(message: types.Message):
     user_id = message.from_user.id
+    print(f"DEBUG: Received message from user_id={user_id}: {message.text}")
     
     if not check_limit(user_id):
+        print(f"DEBUG: Sending limit reached message to user_id={user_id}")
         await message.answer(
             "Хочу ще поговорити 😏, але мої безкоштовні повідомлення майже закінчилися. Можемо продовжити з преміум?"
         )
@@ -106,6 +132,7 @@ async def chat_handler(message: types.Message):
     await message.answer(bot_reply)
 
 async def inline_echo(inline_query: InlineQuery):
+    print(f"DEBUG: Received inline query from user_id={inline_query.from_user.id}: {inline_query.query}")
     text = inline_query.query or "..."
     result_id = str(uuid.uuid4())
     input_content = InputTextMessageContent(text=f"Mila відповідає: {text}")
@@ -122,34 +149,49 @@ dp.inline_query.register(inline_echo)
 
 # ================== Налаштування вебхука ==================
 async def set_webhook(bot: Bot):
-    webhook_url = f"https://{os.getenv('RAILWAY_PUBLIC_DOMAIN')}/webhook/{TELEGRAM_TOKEN}"
-    await bot.set_webhook(url=webhook_url)
-    print("Webhook встановлено!")
+    webhook_url = f"https://{RAILWAY_PUBLIC_DOMAIN}/webhook/{TELEGRAM_TOKEN}"
+    print(f"DEBUG: Setting webhook URL: {webhook_url}")
+    try:
+        await bot.set_webhook(url=webhook_url)
+        print("Webhook встановлено!")
+    except Exception as e:
+        print(f"ERROR: Failed to set webhook: {str(e)}")
+        raise
 
 async def on_startup(dispatcher: Dispatcher, bot: Bot):
+    print("DEBUG: Starting up bot...")
     await set_webhook(bot)
 
 # ================== Запуск ==================
 async def main():
     # Налаштування вебсервера
-    app = web.Application()
-    webhook_requests_handler = SimpleRequestHandler(
-        dispatcher=dp, bot=bot, secret_token=TELEGRAM_TOKEN
-    )
-    webhook_requests_handler.register(app, path=f"/webhook/{TELEGRAM_TOKEN}")
-    setup_application(app, dp, bot=bot)
+    print("DEBUG: Starting web server...")
+    try:
+        app = web.Application()
+        webhook_requests_handler = SimpleRequestHandler(
+            dispatcher=dp, bot=bot, secret_token=TELEGRAM_TOKEN
+        )
+        webhook_requests_handler.register(app, path=f"/webhook/{TELEGRAM_TOKEN}")
+        setup_application(app, dp, bot=bot)
 
-    # Реєстрація хендлера для запуску
-    dp.startup.register(on_startup)
+        # Реєстрація хендлера для запуску
+        dp.startup.register(on_startup)
 
-    # Запуск вебсервера
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', int(os.getenv('PORT', 8080)))
-    await site.start()
+        # Запуск вебсервера
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', int(os.getenv('PORT', 8080)))
+        await site.start()
+        print("DEBUG: Web server started")
+    except Exception as e:
+        print(f"ERROR: Failed to start web server: {str(e)}")
+        raise
 
     # Чекаємо завершення
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        print(f"ERROR: Main loop failed: {str(e)}")
