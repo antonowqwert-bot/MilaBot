@@ -1,4 +1,5 @@
 .DS_Store
 .env
-users.db
-bot.log
+lambda_function.zip
+*.db
+*.log
