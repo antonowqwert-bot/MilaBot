@@ -2,11 +2,11 @@ import os
 import asyncio
 import uuid
 import logging
-import sqlite3
+import json
+import boto3
+from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineQuery, InputTextMessageContent, InlineQueryResultArticle
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
-from aiohttp import web
+from aiogram.types import InlineQuery, InputTextMessageContent, InlineQueryResultArticle
 from openai import OpenAI
 
 # Налаштування логування
@@ -16,11 +16,9 @@ logger = logging.getLogger(__name__)
 # ================== Токени ==================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-RAILWAY_PUBLIC_DOMAIN = os.getenv("RAILWAY_PUBLIC_DOMAIN")
 
 logger.debug(f"TELEGRAM_TOKEN = {TELEGRAM_TOKEN}")
 logger.debug(f"DEEPSEEK_API_KEY = {'***' if DEEPSEEK_API_KEY else None}")
-logger.debug(f"RAILWAY_PUBLIC_DOMAIN = {RAILWAY_PUBLIC_DOMAIN}")
 
 # Перевірка токенів
 if not TELEGRAM_TOKEN:
@@ -29,9 +27,6 @@ if not TELEGRAM_TOKEN:
 if not DEEPSEEK_API_KEY:
     logger.error("DEEPSEEK_API_KEY не знайдено!")
     raise ValueError("❌ DEEPSEEK_API_KEY не знайдено!")
-if not RAILWAY_PUBLIC_DOMAIN:
-    logger.error("RAILWAY_PUBLIC_DOMAIN не знайдено!")
-    raise ValueError("❌ RAILWAY_PUBLIC_DOMAIN не знайдено!")
 
 BASE_URL = 'https://api.deepseek.com'
 MODEL = 'deepseek-chat'
@@ -74,62 +69,92 @@ except Exception as e:
     logger.error(f"Failed to initialize OpenAI client: {str(e)}")
     raise
 
-# ================== Контекст і ліміти користувачів ==================
-user_context = {}
-user_limits = {}
+# ================== Ініціалізація DynamoDB ==================
+dynamodb = boto3.resource('dynamodb')
+limits_table = dynamodb.Table('UserLimits')
+context_table = dynamodb.Table('UserContext')
 
-# ================== Ініціалізація бази даних ==================
 def init_db():
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS user_limits
-                 (user_id INTEGER PRIMARY KEY, message_count INTEGER)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS user_context
-                 (user_id INTEGER, role TEXT, content TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-    conn.commit()
-    conn.close()
-    logger.debug("Database initialized successfully")
+    try:
+        dynamodb.create_table(
+            TableName='UserLimits',
+            KeySchema=[{'AttributeName': 'user_id', 'KeyType': 'HASH'}],
+            AttributeDefinitions=[{'AttributeName': 'user_id', 'AttributeType': 'N'}],
+            BillingMode='PAY_PER_REQUEST'
+        )
+        dynamodb.create_table(
+            TableName='UserContext',
+            KeySchema=[{'AttributeName': 'user_id', 'KeyType': 'HASH'}, {'AttributeName': 'timestamp', 'KeyType': 'RANGE'}],
+            AttributeDefinitions=[
+                {'AttributeName': 'user_id', 'AttributeType': 'N'},
+                {'AttributeName': 'timestamp', 'AttributeType': 'S'}
+            ],
+            BillingMode='PAY_PER_REQUEST'
+        )
+        logger.debug("DynamoDB tables initialized successfully")
+    except dynamodb.meta.client.exceptions.ResourceInUseException:
+        logger.debug("DynamoDB tables already exist")
 
 init_db()
 
-# ================== Функції для роботи з базою даних ==================
+# ================== Функції для роботи з DynamoDB ==================
 def save_limit(user_id, count):
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO user_limits (user_id, message_count) VALUES (?, ?)", (user_id, count))
-    conn.commit()
-    conn.close()
+    limits_table.put_item(Item={'user_id': user_id, 'message_count': count})
     logger.debug(f"Saved limit for user_id={user_id}: {count}")
 
 def save_context(user_id, role, content):
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute("INSERT INTO user_context (user_id, role, content) VALUES (?, ?, ?)", (user_id, role, content))
-    c.execute("DELETE FROM user_context WHERE user_id = ? AND ROWID NOT IN (SELECT ROWID FROM user_context WHERE user_id = ? ORDER BY timestamp DESC LIMIT 10)", (user_id, user_id))
-    conn.commit()
-    conn.close()
+    timestamp = datetime.utcnow().isoformat()
+    context_table.put_item(Item={
+        'user_id': user_id,
+        'role': role,
+        'content': content,
+        'timestamp': timestamp
+    })
+    # Видаляємо старі записи, залишаючи останні 10
+    response = context_table.query(
+        KeyConditionExpression='user_id = :uid',
+        ExpressionAttributeValues={':uid': user_id},
+        ProjectionExpression='timestamp',
+        ScanIndexForward=False,
+        Limit=10
+    )
+    items = response.get('Items', [])
+    if len(items) == 10:
+        old_items = context_table.query(
+            KeyConditionExpression='user_id = :uid',
+            ExpressionAttributeValues={':uid': user_id},
+            ScanIndexForward=False,
+            Limit=100
+        ).get('Items', [])
+        for item in old_items[10:]:
+            context_table.delete_item(Key={'user_id': user_id, 'timestamp': item['timestamp']})
     logger.debug(f"Saved context for user_id={user_id}")
 
 def load_limit(user_id):
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute("SELECT message_count FROM user_limits WHERE user_id = ?", (user_id,))
-    result = c.fetchone()
-    conn.close()
-    return result[0] if result else 0
+    try:
+        response = limits_table.get_item(Key={'user_id': user_id})
+        return response.get('Item', {}).get('message_count', 0)
+    except Exception as e:
+        logger.error(f"Failed to load limit: {str(e)}")
+        return 0
 
 def load_context(user_id):
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute("SELECT role, content FROM user_context WHERE user_id = ? ORDER BY timestamp DESC LIMIT 10", (user_id,))
-    result = c.fetchall()
-    conn.close()
-    return [{"role": row[0], "content": row[1]} for row in result]
+    try:
+        response = context_table.query(
+            KeyConditionExpression='user_id = :uid',
+            ExpressionAttributeValues={':uid': user_id},
+            ScanIndexForward=False,
+            Limit=10
+        )
+        return [{'role': item['role'], 'content': item['content']} for item in response.get('Items', [])]
+    except Exception as e:
+        logger.error(f"Failed to load context: {str(e)}")
+        return []
 
 # ================== Функції ==================
 async def generate_response(user_id, user_message):
     logger.debug(f"Generating response for user_id={user_id}, message={user_message}")
-    context = user_context.get(user_id, [])
+    context = load_context(user_id)
     context.append({"role": "user", "content": user_message})
     
     try:
@@ -141,7 +166,8 @@ async def generate_response(user_id, user_message):
         )
         bot_message = response.choices[0].message.content.strip()
         context.append({"role": "assistant", "content": bot_message})
-        user_context[user_id] = context[-10:]  # останні 10 повідомлень
+        save_context(user_id, "user", user_message)
+        save_context(user_id, "assistant", bot_message)
         logger.debug(f"Generated response: {bot_message}")
         return bot_message
     except Exception as e:
@@ -152,18 +178,24 @@ def check_limit(user_id):
     if user_id == ADMIN_USER_ID:
         logger.debug(f"User {user_id} is admin, bypassing limit")
         return True
-    count = user_limits.get(user_id, 0)
+    count = load_limit(user_id)
     logger.debug(f"User {user_id} has sent {count} messages")
     if count >= MAX_FREE_MESSAGES:
         logger.debug(f"User {user_id} reached message limit")
         return False
-    user_limits[user_id] = count + 1
+    count += 1
+    save_limit(user_id, count)
     return True
 
 # ================== Хендлери ==================
 async def start_cmd(message: types.Message):
     logger.debug(f"Received /start from user_id={message.from_user.id}")
-    await message.answer("Привіт! Рада тебе бачити 😊", reply_markup=menu_kb)
+    await message.answer("Привіт! Рада тебе бачити 😊")
+
+async def stats_cmd(message: types.Message):
+    user_id = message.from_user.id
+    count = load_limit(user_id)
+    await message.answer(f"Ти надіслав {count} із {MAX_FREE_MESSAGES} безкоштовних повідомлень. 😊")
 
 async def chat_handler(message: types.Message):
     user_id = message.from_user.id
@@ -193,57 +225,16 @@ async def inline_echo(inline_query: InlineQuery):
 
 # ================== Реєстрація хендлерів ==================
 dp.message.register(start_cmd, F.text.startswith("/start"))
+dp.message.register(stats_cmd, F.text.startswith("/stats"))
 dp.message.register(chat_handler)
 dp.inline_query.register(inline_echo)
 
-# ================== Налаштування вебхука ==================
-async def set_webhook(bot: Bot):
-    webhook_path = f"/webhook/{TELEGRAM_TOKEN}"
-    webhook_url = f"https://{RAILWAY_PUBLIC_DOMAIN}{webhook_path}"
-    logger.debug(f"Setting webhook URL: {webhook_url}")
+# ================== Обробник Lambda ==================
+async def lambda_handler(event, context):
     try:
-        await bot.set_webhook(url=webhook_url)
-        logger.info("Webhook встановлено!")
+        update = json.loads(event['body'])
+        await dp.feed_raw_update(bot, update)
+        return {"statusCode": 200, "body": json.dumps({"ok": True})}
     except Exception as e:
-        logger.error(f"Failed to set webhook: {str(e)}")
-        raise
-
-async def on_startup(dispatcher: Dispatcher, bot: Bot):
-    logger.debug("Starting up bot...")
-    await set_webhook(bot)
-
-# ================== Запуск ==================
-async def main():
-    logger.debug("Starting web server...")
-    try:
-        app = web.Application()
-        webhook_requests_handler = SimpleRequestHandler(
-            dispatcher=dp, bot=bot, secret_token=None  # Вимикаємо secret_token
-        )
-        webhook_path = f"/webhook/{TELEGRAM_TOKEN}"
-        logger.debug(f"Registering webhook handler on path: {webhook_path}")
-        webhook_requests_handler.register(app, path=webhook_path)
-        setup_application(app, dp, bot=bot)
-
-        dp.startup.register(on_startup)
-
-        runner = web.AppRunner(app)
-        await runner.setup()
-        port = int(os.getenv('PORT', 8080))
-        logger.debug(f"Starting server on port {port}")
-        site = web.TCPSite(runner, '0.0.0.0', port)
-        await site.start()
-        logger.info("Web server started")
-    except Exception as e:
-        logger.error(f"Failed to start web server: {str(e)}")
-        raise
-
-    await asyncio.Event().wait()
-
-if __name__ == "__main__":
-    try:
-        logger.debug("Running main loop...")
-        asyncio.run(main())
-    except Exception as e:
-        logger.error(f"Main loop failed: {str(e)}")
-        raise
+        logger.error(f"Error: {str(e)}")
+        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
