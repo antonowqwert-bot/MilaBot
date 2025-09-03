@@ -77,15 +77,6 @@ except Exception as e:
 user_context = {}
 user_limits = {}
 
-# ================== Клавіатура ==================
-menu_kb = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="Почати спілкування")],
-        [KeyboardButton(text="Моя статистика")]
-    ],
-    resize_keyboard=True
-)
-
 # ================== Функції ==================
 async def generate_response(user_id, user_message):
     logger.debug(f"Generating response for user_id={user_id}, message={user_message}")
