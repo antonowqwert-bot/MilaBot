@@ -2,6 +2,7 @@ import os
 import asyncio
 import uuid
 import logging
+import sqlite3
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineQuery, InputTextMessageContent, InlineQueryResultArticle
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
