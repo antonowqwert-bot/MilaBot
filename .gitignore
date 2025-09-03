@@ -1,3 +1,4 @@
-.DS_Store
+DS_Store
 .env
-.env
+users.db
+bot.log

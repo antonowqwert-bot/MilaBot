@@ -77,6 +77,54 @@ except Exception as e:
 user_context = {}
 user_limits = {}
 
+# ================== Ініціалізація бази даних ==================
+def init_db():
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS user_limits
+                 (user_id INTEGER PRIMARY KEY, message_count INTEGER)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS user_context
+                 (user_id INTEGER, role TEXT, content TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+    conn.commit()
+    conn.close()
+    logger.debug("Database initialized successfully")
+
+init_db()
+
+# ================== Функції для роботи з базою даних ==================
+def save_limit(user_id, count):
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute("INSERT OR REPLACE INTO user_limits (user_id, message_count) VALUES (?, ?)", (user_id, count))
+    conn.commit()
+    conn.close()
+    logger.debug(f"Saved limit for user_id={user_id}: {count}")
+
+def save_context(user_id, role, content):
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO user_context (user_id, role, content) VALUES (?, ?, ?)", (user_id, role, content))
+    c.execute("DELETE FROM user_context WHERE user_id = ? AND ROWID NOT IN (SELECT ROWID FROM user_context WHERE user_id = ? ORDER BY timestamp DESC LIMIT 10)", (user_id, user_id))
+    conn.commit()
+    conn.close()
+    logger.debug(f"Saved context for user_id={user_id}")
+
+def load_limit(user_id):
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute("SELECT message_count FROM user_limits WHERE user_id = ?", (user_id,))
+    result = c.fetchone()
+    conn.close()
+    return result[0] if result else 0
+
+def load_context(user_id):
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute("SELECT role, content FROM user_context WHERE user_id = ? ORDER BY timestamp DESC LIMIT 10", (user_id,))
+    result = c.fetchall()
+    conn.close()
+    return [{"role": row[0], "content": row[1]} for row in result]
+
 # ================== Функції ==================
 async def generate_response(user_id, user_message):
     logger.debug(f"Generating response for user_id={user_id}, message={user_message}")
